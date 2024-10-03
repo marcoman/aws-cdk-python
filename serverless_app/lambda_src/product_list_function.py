@@ -1,3 +1,4 @@
+# we use boto3 from the AWS SDK for our lambda function.
 import json
 import os
 import logging
