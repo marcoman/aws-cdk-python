@@ -4,6 +4,8 @@ from aws_cdk import (
     RemovalPolicy,
     aws_lambda as lambda_,
     CfnOutput,
+    aws_cloudwatch as cloudwatch,
+    Duration,
 )
 from constructs import Construct
 
@@ -47,9 +49,9 @@ class ServerlessAppStack(Stack):
         # https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_dynamodb.Table.html and then
         # https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_dynamodb/Table.html
         # We'll want to read data.
-        
-        products_table.grant_read_data(product_list_function.role)
 
+        # For the purpose of testing our CloudWatch alarm, we will remove permission on our function to read the table.
+        products_table.grant_read_data(product_list_function.role)
         
         # Now add a Lamda URL to the Lambda function to execute it from the internet
         # See https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_lambda/Function.html#aws_cdk.aws_lambda.Function.add_function_url
@@ -65,3 +67,28 @@ class ServerlessAppStack(Stack):
                   value = product_list_url.url,
                   description="This is our URL to our Lambda"
                   )
+        
+        
+        # Configuring an alarm for the Lambda function errors metric.
+        # I am mostly following-along with the narrative by the lecturer.  Individually, the information I heard 
+        # makes sense.  However, there are about 8 different pieces of information I have to reconcile into a 
+        # story to help me understand the solution for the problem we are trying to solve:
+        # How do we send a Lambda error to CloudWatch?
+        
+        # We know our function is product_list_function, and we get its metric_errors.
+        # See https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_lambda/Function.html#aws_cdk.aws_lambda.Function.metric_errors
+        errors_metric = product_list_function.metric_errors(
+            label="ProductListFunction Errors",
+            # For this exercise, I am setting the duration to 1 minute, and not 5 as suggested.
+            period=Duration.minutes(1),
+            statistic=cloudwatch.Stats.SUM,
+        )
+
+       # See https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_cloudwatch/Metric.html#aws_cdk.aws_cloudwatch.Metric.create_alarm
+        errors_metric.create_alarm(self,
+                                 "ProductListFunction Alarm",
+                                 evaluation_periods=1,
+                                 threshold=1,
+                                 comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                                 treat_missing_data=cloudwatch.TreatMissingData.IGNORE,
+        )
